@@ -98,9 +98,9 @@ class Audio(DisplayObject):
     See Also
     --------
     ipywidgets.Audio
-    
+
          AUdio widget with more more flexibility and options.
-    
+
     """
     _read_flags = 'rb'
 
@@ -176,7 +176,7 @@ class Audio(DisplayObject):
             data = data.T.ravel()
         else:
             raise ValueError('Array audio input must be a 1D or 2D array')
-        
+
         max_abs_value = np.max(np.abs(data))
         normalization_factor = Audio._get_normalization_factor(max_abs_value, normalize)
         scaled = data / normalization_factor * 32767
@@ -244,81 +244,124 @@ class Audio(DisplayObject):
             return 'autoplay="autoplay"'
         else:
             return ''
-    
+
     def element_id_attr(self):
         if (self.element_id):
             return 'id="{element_id}"'.format(element_id=self.element_id)
         else:
             return ''
 
+
 class IFrame(object):
     """
     Generic class to embed an iframe in an IPython notebook
     """
 
-    iframe = """
-        <iframe
-            width="{width}"
-            height="{height}"
-            src="{src}{params}"
-            frameborder="0"
-            allowfullscreen
-            {extra}
-        ></iframe>
-        """
+    iframe_default_args = ["allowfullscreen"]
+    iframe_default_kwargs = dict(frameborder=0)
+    iframe_indent = " " * 8
+    iframe_opts_indent = " " * 4
 
-    def __init__(self, src, width, height, extra="", **kwargs):
+    def __init__(self,
+                 src,
+                 width,
+                 height,
+                 iframe_args=None,
+                 iframe_kwargs=None,
+                 **kwargs):
         self.src = src
         self.width = width
         self.height = height
-        self.extra = extra
+        self.iframe_args = iframe_args or []
+        self.iframe_default_args = [
+            _ for _ in self.iframe_default_args if _ not in self.iframe_args
+        ]
+        self.iframe_kwargs = iframe_kwargs or {}
+        iframe_default_kwargs = list(self.iframe_default_kwargs.keys())
+        for key in iframe_default_kwargs:
+            if key in iframe_kwargs:
+                self.iframe_default_kwargs.pop(key)
         self.params = kwargs
+
+    @staticmethod
+    def _format_as_str(arg):
+        if arg is None:
+            return ""
+        elif isinstance(arg, str):
+            return arg
+        elif isinstance(arg, list):
+            return "\n".join(arg)
+        elif isinstance(arg, dict):
+            return "\n".join(
+                [f'{k}="{v}"' for k, v in arg.items() if v is not None])
+        else:
+            return str(arg)
 
     def _repr_html_(self):
         """return the embed iframe"""
+        from textwrap import indent
+
         if self.params:
             from urllib.parse import urlencode
+
             params = "?" + urlencode(self.params)
         else:
             params = ""
-        return self.iframe.format(src=self.src,
-                                  width=self.width,
-                                  height=self.height,
-                                  params=params,
-                                  extra=self.extra)
+        src = f"{self.src}{params}"
+        opts = dict(
+            width=self.width,
+            height=self.height,
+            src=src,
+        )
+        iframe_opts = [
+            opts,
+            self.iframe_default_args,
+            self.iframe_default_kwargs,
+            self.iframe_args,
+            self.iframe_kwargs,
+        ]
+        iframe_opts = map(self._format_as_str, filter(bool, iframe_opts))
+        iframe_opts = indent(
+            "\n".join(iframe_opts),
+            prefix=self.iframe_opts_indent,
+        )
+        iframe_parts = [
+            "<iframe",
+            iframe_opts,
+            "></iframe>",
+        ]
+        iframe = indent("\n".join(iframe_parts), prefix=self.iframe_indent)
+        return iframe
 
 
 class YouTubeVideo(IFrame):
     """Class for embedding a YouTube Video in an IPython session, based on its video id.
-
     e.g. to embed the video from https://www.youtube.com/watch?v=foo , you would
     do::
-
         vid = YouTubeVideo("foo")
         display(vid)
-
     To start from 30 seconds::
-
         vid = YouTubeVideo("abc", start=30)
         display(vid)
-
     To calculate seconds from time as hours, minutes, seconds use
     :class:`datetime.timedelta`::
-
         start=int(timedelta(hours=1, minutes=46, seconds=40).total_seconds())
-
     Other parameters can be provided as documented at
     https://developers.google.com/youtube/player_parameters#Parameters
-    
+
     When converting the notebook using nbconvert, a jpeg representation of the video
     will be inserted in the document.
     """
-
-    def __init__(self, id, width=400, height=300, allow_autoplay=False, **kwargs):
-        self.id=id
+    def __init__(self, id, width=400, height=300, autoplay=False, **kwargs):
+        self.id = id
         src = "https://www.youtube.com/embed/{0}".format(id)
-        if allow_autoplay:
-            kwargs.update(autoplay=1, extra='allow="autoplay"')
+        if autoplay:
+            iframe_kwargs = kwargs.pop("iframe_kwargs", {})
+            allow = iframe_kwargs.pop("allow", "autoplay")
+            iframe_kwargs.update(dict(allow=allow))
+            if autoplay is True:
+                autoplay = 1
+            kwargs.update(dict(autoplay=autoplay, iframe_kwargs=iframe_kwargs))
         super(YouTubeVideo, self).__init__(src, width, height, **kwargs)
 
     def _repr_jpeg_(self):
@@ -326,9 +369,12 @@ class YouTubeVideo(IFrame):
         from urllib.request import urlopen
 
         try:
-            return urlopen("https://img.youtube.com/vi/{id}/hqdefault.jpg".format(id=self.id)).read()
+            return urlopen(
+                "https://img.youtube.com/vi/{id}/hqdefault.jpg".format(
+                    id=self.id)).read()
         except IOError:
             return None
+
 
 class VimeoVideo(IFrame):
     """
@@ -530,7 +576,7 @@ class FileLinks(FileLink):
                 if (isfile(join(dirname,fname)) and
                        (included_suffixes is None or
                         splitext(fname)[1] in included_suffixes)):
-                      display_fnames.append(fname)
+                    display_fnames.append(fname)
 
             if len(display_fnames) == 0:
                 # if there are no filenames to display, don't print anything
